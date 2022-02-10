@@ -7,6 +7,8 @@ namespace NFSmartMeter
 {
 	public class RGBLed
 	{
+		
+
 		// 80MHz / 4 => min pulse 0.00us
 		protected const byte ClockDivider = 4;
 		// one pulse duration in us

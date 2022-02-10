@@ -183,7 +183,7 @@ namespace NFSmartMeter
                 {
                     timeNum[i] = int.Parse(timeString.Substring(i * 2, 2));
                 }
-                var time = new DateTime(2000 + timeNum[0], timeNum[1], timeNum[2], timeNum[3] + (isWintertime ? 1 : 2), timeNum[4], timeNum[5]);
+                var time = new DateTime(2000 + timeNum[0], timeNum[1], timeNum[2], timeNum[3] , timeNum[4], timeNum[5]).AddHours( -(isWintertime ? 1 : 2));
                 return time;
             }
 
