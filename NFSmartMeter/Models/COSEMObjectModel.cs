@@ -1,6 +1,4 @@
-﻿using System;
-
-
+﻿
 namespace NFSmartMeter.Models
 {
     public struct COSEMObjectModel

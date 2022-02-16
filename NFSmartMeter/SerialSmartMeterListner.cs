@@ -1,45 +1,98 @@
-﻿using System;
-using System.Diagnostics;
-using System.Text;
+﻿using nanoFramework.Hardware.Esp32;
 using NFSmartMeter.Models;
+using System;
+using System.IO.Ports;
+using System.Text;
+using System.Threading;
 
 namespace NFSmartMeter
 {
-    static class SerialDataHandler
+    public  class SerialSmartMeterListner
     {
+        private SerialPort _serialDevice;
+        public event P1MessageEventHandler P1MessageReceived;
+        public delegate void P1MessageEventHandler (object sender, P1MessageEventArgs e);
+
+        public SerialSmartMeterListner(int rxPin, int txPin)
+        {
+            Configuration.SetPinFunction(txPin, DeviceFunction.COM2_TX);
+            Configuration.SetPinFunction(rxPin, DeviceFunction.COM2_RX);
+
+            _serialDevice = new SerialPort("com2", 115200, Parity.None, 8, StopBits.One);
+            _serialDevice.ReadTimeout = 2000;
+            _serialDevice.InvertSignalLevels = true;
+
+            Thread listenTread = new Thread(ReadSerialPort);
+            listenTread.Start();
+        }
+
+        private  void ReadSerialPort()
+        {
+            _serialDevice.Open();
+
+            byte[] buffer = new byte[3072];
+            int index = 0;
+            int bytesToRead = 0;
+            bool bufferOverload = false;
+
+            while (true)
+            {
+                while (!bufferOverload || (index > 7 && buffer[index - 7] != '!'))
+                {
+                    while (_serialDevice.BytesToRead != 0)
+                    {
+                        bytesToRead = _serialDevice.BytesToRead;
+                        if (bytesToRead + index <= buffer.Length)
+                        {
+                            index += _serialDevice.Read(buffer, index, bytesToRead);
+                        }
+                        else
+                        {
+                            bufferOverload = true;
+                            break;
+                        }
+                        Thread.Sleep(10);
+                    }
+                    if (index > 7 && buffer[index - 7] == '!')
+                    {
+                        break;
+                    }
+                }
+
+                if (!bufferOverload)
+                {
+                    byte[] messageBuffer = new byte[index];
+                    Array.Copy(buffer, messageBuffer, index);
+                    EnergyReadoutModel readOut = SerialHandler(messageBuffer);
+                    if (readOut != null)
+                    {
+                        P1MessageReceived?.Invoke(this, new P1MessageEventArgs() { EnergyReadout = readOut });
+                    }
+
+                }
+
+                index = 0;
+                bufferOverload = false;
+            }
+
+            _serialDevice.Close();
+        }
+
         public static EnergyReadoutModel SerialHandler(byte[] serialdata)
         {
-
-            //byte[] buffer = new byte[serialdata.Length - 6];
-            //Array.Copy(serialdata, 0, buffer, 0, serialdata.Length - 6);
             string crcString = Encoding.UTF8.GetString(serialdata, serialdata.Length - 6, 4);
             uint crc = hexString2uint(crcString);
-            if (CheckCrc(serialdata, crc)) 
+            if (CheckCrc(serialdata, crc))
             {
-                return P1MessageDecoder.DecodeData(Encoding.UTF8.GetString(serialdata, 0, serialdata.Length -6));
+                return P1MessageDecoder.DecodeData(Encoding.UTF8.GetString(serialdata, 0, serialdata.Length - 6));
 
             }
             else
-            {              
+            {
                 return null;
             }
-
-            //byte[] buffer = new byte[serialdata.Length - 6];
-            //Array.Copy(serialdata, 0, buffer, 0, serialdata.Length - 6);
-            //string crcString = Encoding.UTF8.GetString(serialdata, serialdata.Length - 6, 4);
-            //uint crc = hexString2uint(crcString);
-            //if (CheckCrc(buffer, crc))
-            //{
-            //    return P1MessageDecoder.DecodeData(Encoding.UTF8.GetString(buffer, 0, buffer.Length));
-
-            //}
-            //else
-            //{
-            //    return null;
-            //}
-
         }
-        
+
         private static uint hexString2uint(string crcString)
         {
             if (crcString.Length != 4)
@@ -47,7 +100,7 @@ namespace NFSmartMeter
                 return 0; //uneven Number can not be a hex representation
             }
             uint[] partNums = new uint[crcString.Length];
-            
+
             for (int i = 0; i < crcString.Length; i++)
             {
                 switch (crcString[i])
@@ -109,8 +162,7 @@ namespace NFSmartMeter
 
         }
 
-
-        static bool CheckCrc(byte[] buf, uint givenCrc)
+        private static bool CheckCrc(byte[] buf, uint givenCrc)
         {
 
             uint crc = 0;
@@ -133,5 +185,13 @@ namespace NFSmartMeter
 
             return crc == givenCrc;
         }
+
+
+
+    }
+
+    public class P1MessageEventArgs : EventArgs
+    {
+        public EnergyReadoutModel EnergyReadout { get; set; }
     }
 }

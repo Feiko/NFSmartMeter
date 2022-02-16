@@ -6,7 +6,7 @@ using System.Text;
 namespace NFSmartMeter
 {
 
-        public static class P1MessageDecoder
+        public class P1MessageDecoder
         {
             //static CultureInfo US = new CultureInfo("en-US");
 
