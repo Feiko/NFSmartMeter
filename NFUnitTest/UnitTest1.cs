@@ -1,4 +1,5 @@
 using nanoFramework.TestFramework;
+using NFSmartMeter;
 using System;
 
 namespace NFUnitTest
@@ -66,8 +67,8 @@ namespace NFUnitTest
         [TestMethod]
         public void TestMethod1()
         {
-
-            var model = NFSmartMeter.P1MessageDecoder.DecodeData(testMessagestring);
+            var decoder = new P1MessageDecoder();
+            var model = decoder.DecodeData(testMessagestring);
             Assert.Equal(model.MeterId, "XMX5LGF0000453094270");
 
         }

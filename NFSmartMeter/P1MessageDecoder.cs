@@ -2,6 +2,7 @@
 using System;
 using System.Diagnostics;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace NFSmartMeter
 {
@@ -10,8 +11,9 @@ namespace NFSmartMeter
         {
             //static CultureInfo US = new CultureInfo("en-US");
 
-            public static EnergyReadoutModel DecodeData(string data)
+            public  EnergyReadoutModel DecodeData(string data)
             {
+                
                 var lines = data.Split(new char[] { '\r', '\n' });
 
                 EnergyReadoutModel readout = new EnergyReadoutModel();
@@ -163,7 +165,7 @@ namespace NFSmartMeter
             return readout;
             }
 
-            static PowerOutageModel[] ParsePowerOutages(string[] powerOutageValues)
+            private PowerOutageModel[] ParsePowerOutages(string[] powerOutageValues)
             {
                 int numPowerOutages = int.Parse(powerOutageValues[0] ?? "0");
                 PowerOutageModel[] outages = new PowerOutageModel[numPowerOutages];
@@ -175,7 +177,7 @@ namespace NFSmartMeter
                 return outages;
             }
 
-            static DateTime ParseTime(string timeString)
+            private DateTime ParseTime(string timeString)
             {
                 bool isWintertime = (timeString[12].Equals('W'));
                 int[] timeNum = new int[6];
@@ -187,7 +189,7 @@ namespace NFSmartMeter
                 return time;
             }
 
-            static string OctStringToHexString(string octString)
+            private string OctStringToHexString(string octString)
             {
                 string hexString = string.Empty;
                 for (int i = 0; i < octString.Length; i += 2)
@@ -199,11 +201,11 @@ namespace NFSmartMeter
                 return hexString;
             }
 
-            static double ParseKWH(string kwhString)
+            private double ParseKWH(string kwhString)
             {
                 return double.Parse(kwhString);
             }
-            static COSEMObjectModel GetCosemObjectFromLine(string line)
+            private COSEMObjectModel GetCosemObjectFromLine(string line)
             {
                 COSEMObjectModel cosem = new COSEMObjectModel();
                 var splits = line.Split('(');
@@ -252,7 +254,7 @@ namespace NFSmartMeter
                 return cosem;
             }
 
-            static string[] removeTrailing(string part)
+            private string[] removeTrailing(string part)
             {
                 return part.Trim().TrimEnd(')').Split('*');
 

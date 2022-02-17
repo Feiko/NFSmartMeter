@@ -131,6 +131,9 @@
     <Reference Include="System.Net.WebSockets">
       <HintPath>..\packages\nanoFramework.System.Net.WebSockets.Client.1.0.0-preview.75\lib\System.Net.WebSockets.dll</HintPath>
     </Reference>
+    <Reference Include="System.Text.RegularExpressions">
+      <HintPath>..\packages\nanoFramework.System.Text.RegularExpressions.1.0.5-preview.3\lib\System.Text.RegularExpressions.dll</HintPath>
+    </Reference>
     <Reference Include="System.Threading, Version=1.0.4.0, Culture=neutral, PublicKeyToken=c07d481e9758c731">
       <HintPath>..\packages\nanoFramework.System.Threading.1.0.4-preview.14\lib\System.Threading.dll</HintPath>
       <Private>True</Private>
