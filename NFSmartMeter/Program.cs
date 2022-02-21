@@ -1,16 +1,12 @@
 using nanoFramework.AtomLite;
 using nanoFramework.Hardware.Esp32;
-using NFSmartMeter.Models;
 using System;
 using System.Diagnostics;
 using System.Drawing;
-using System.IO.Ports;
-using System.Text;
 using System.Threading;
 using nanoFramework.SignalR.Client;
 using nanoFramework.Networking;
 using System.Net;
-using System.Net.WebSockets;
 
 namespace NFSmartMeter
 {

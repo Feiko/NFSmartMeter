@@ -183,7 +183,7 @@ namespace NFSmartMeter
             // -6 because we are reusing the original byte[] because of memory conservation
             for (int pos = 0; pos < buf.Length - 6; pos++)
             {
-                crc ^= (uint)buf[pos];    // XOR byte into least sig. byte of crc
+                crc ^= buf[pos];    // XOR byte into least sig. byte of crc
 
                 for (int i = 8; i != 0; i--)
                 {    // Loop over each bit

@@ -73,16 +73,6 @@
       <Private>True</Private>
       <SpecificVersion>True</SpecificVersion>
     </Reference>
-    <Reference Include="nanoFramework.TestFramework, Version=1.0.175.0, Culture=neutral, PublicKeyToken=c07d481e9758c731">
-      <HintPath>..\packages\nanoFramework.TestFramework.1.0.175\lib\nanoFramework.TestFramework.dll</HintPath>
-      <Private>True</Private>
-      <SpecificVersion>True</SpecificVersion>
-    </Reference>
-    <Reference Include="nanoFramework.UnitTestLauncher, Version=0.0.0.0, Culture=neutral, PublicKeyToken=c07d481e9758c731">
-      <HintPath>..\packages\nanoFramework.TestFramework.1.0.175\lib\nanoFramework.UnitTestLauncher.exe</HintPath>
-      <Private>True</Private>
-      <SpecificVersion>True</SpecificVersion>
-    </Reference>
     <Reference Include="System.Device.Adc, Version=1.0.2.0, Culture=neutral, PublicKeyToken=c07d481e9758c731">
       <HintPath>..\packages\nanoFramework.System.Device.Adc.1.0.2-preview.6\lib\System.Device.Adc.dll</HintPath>
       <Private>True</Private>
@@ -131,9 +121,6 @@
     <Reference Include="System.Net.WebSockets">
       <HintPath>..\packages\nanoFramework.System.Net.WebSockets.Client.1.0.0-preview.75\lib\System.Net.WebSockets.dll</HintPath>
     </Reference>
-    <Reference Include="System.Text.RegularExpressions">
-      <HintPath>..\packages\nanoFramework.System.Text.RegularExpressions.1.0.5-preview.3\lib\System.Text.RegularExpressions.dll</HintPath>
-    </Reference>
     <Reference Include="System.Threading, Version=1.0.4.0, Culture=neutral, PublicKeyToken=c07d481e9758c731">
       <HintPath>..\packages\nanoFramework.System.Threading.1.0.4-preview.14\lib\System.Threading.dll</HintPath>
       <Private>True</Private>
@@ -147,7 +134,6 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="app.config" />
-    <None Include="nano.runsettings" />
     <None Include="packages.config" />
   </ItemGroup>
   <Import Project="$(NanoFrameworkProjectSystemPath)NFProjectSystem.CSharp.targets" Condition="Exists('$(NanoFrameworkProjectSystemPath)NFProjectSystem.CSharp.targets')" />
