@@ -9,14 +9,13 @@ using Windows.Storage.Streams;
 
 namespace NFSmartMeter
 {
-    public  class SerialSmartMeterListner
+    public class SerialSmartMeterListner
     {
         private object _lock = new object();
         private Queue Messages = new Queue();
         private SerialPort _serialDevice;
         public event P1MessageEventHandler P1MessageReceived;
-        public delegate void P1MessageEventHandler (object sender, P1MessageEventArgs e);
-        private static P1MessageDecoder _decoder = new P1MessageDecoder();
+        public delegate void P1MessageEventHandler(object sender, P1MessageEventArgs e);
 
         public SerialSmartMeterListner(int rxPin, int txPin)
         {
@@ -29,12 +28,9 @@ namespace NFSmartMeter
 
             Thread listenTread = new Thread(ReadSerialPort);
             listenTread.Start();
-
-            Thread DecodePayloadThread = new Thread(SerialHandler);
-            DecodePayloadThread.Start();
         }
 
-        private  void ReadSerialPort()
+        private void ReadSerialPort()
         {
             //var message = _decoder.DecodeData(TestDataRaw);
 
@@ -79,15 +75,12 @@ namespace NFSmartMeter
                 {
                     byte[] messageBuffer = new byte[index];
                     Array.Copy(buffer, messageBuffer, index);
-                    lock (_lock)
+
+                    EnergyReadoutModel readOut = SerialHandler(messageBuffer);
+                    if (readOut != null)
                     {
-                        Messages.Enqueue(messageBuffer);
+                        P1MessageReceived?.Invoke(this, new P1MessageEventArgs() { EnergyReadout = readOut });
                     }
-                    /*EnergyReadoutModel readOut = */ //SerialHandler(messageBuffer);
-                    //if (readOut != null)
-                    //{
-                    //    P1MessageReceived?.Invoke(this, new P1MessageEventArgs() { EnergyReadout = readOut });
-                    //}
 
                 }
 
@@ -98,34 +91,20 @@ namespace NFSmartMeter
             _serialDevice.Close();
         }
 
-        public void /*EnergyReadoutModel*/ SerialHandler(/*byte[] serialdata*/)
+        public EnergyReadoutModel SerialHandler(byte[] serialdata)
         {
-            while (true)
+
+            string crcString = Encoding.UTF8.GetString(serialdata, serialdata.Length - 6, 4);
+            uint crc = hexString2uint(crcString);
+            if (CheckCrc(serialdata, crc))
             {
-                while (Messages.Count == 0)
-                {
-                    Thread.Sleep(150);
-                }
-
-                byte[] serialdata;
-                lock (_lock)
-                {
-                    serialdata = (byte[])Messages.Dequeue();
-                }
-                string crcString = Encoding.UTF8.GetString(serialdata, serialdata.Length - 6, 4);
-                uint crc = hexString2uint(crcString);
-                if (CheckCrc(serialdata, crc))
-                {
-                    var readOut = _decoder.DecodeData(Encoding.UTF8.GetString(serialdata, 0, serialdata.Length - 6));
-                    P1MessageReceived?.Invoke(this, new P1MessageEventArgs() { EnergyReadout = readOut });
-
-                }
-                
+                return P1MessageDecoder.DecodeData(serialdata);
             }
-            //else
-            //{
-            //    return null;
-            //}
+            else
+            {
+                return null;
+            }
+
         }
 
         private static uint hexString2uint(string crcString)
@@ -220,34 +199,6 @@ namespace NFSmartMeter
 
             return crc == givenCrc;
         }
-
-        public const string TestDataRaw = @"/XMX5LGF0000453094270
-
-1-3:0.2.8(50)
-0-0:1.0.0(210304120347W)
-0-0:96.1.1(4530303531303035333039343237303139)
-1-0:1.8.1(001819.387*kWh)
-1-0:1.8.2(002093.302*kWh)
-1-0:2.8.1(000088.650*kWh)
-1-0:2.8.2(000157.206*kWh)
-0-0:96.14.0(0002)
-1-0:1.7.0(00.288*kW)
-1-0:2.7.0(00.000*kW)
-0-0:96.7.21(00015)
-0-0:96.7.9(00002)
-1-0:99.97.0(1)(0-0:96.7.19)(190226161118W)(0000000541*s)
-1-0:32.32.0(00019)
-1-0:32.36.0(00002)
-0-0:96.13.0()
-1-0:32.7.0(231.0*V)
-1-0:31.7.0(001*A)
-1-0:21.7.0(00.288*kW)
-1-0:22.7.0(00.000*kW)
-0-1:24.1.0(003)
-0-1:96.1.0(4730303339303031393231393034393139)
-0-1:24.2.1(210304120005W)(01980.598*m3)
-!894F  ";
-
     }
 
     public class P1MessageEventArgs : EventArgs

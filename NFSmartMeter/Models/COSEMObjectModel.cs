@@ -8,7 +8,7 @@ namespace NFSmartMeter.Models
         public string ObisIdTrail;
         public string[] Values;
         public string Value;
-
+        public string DeviceKey;
         public string Unit { get; internal set; }
     }
 }

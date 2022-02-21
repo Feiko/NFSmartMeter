@@ -7,21 +7,24 @@ using System.Text.RegularExpressions;
 namespace NFSmartMeter
 {
 
-        public class P1MessageDecoder
+    public static class P1MessageDecoder
+    {
+
+        public static EnergyReadoutModel DecodeData(byte[] data)
         {
-            //static CultureInfo US = new CultureInfo("en-US");
+            EnergyReadoutModel readout = new EnergyReadoutModel();
+            int lineBreakIndex = GetNextLineBreak(0, data);
 
-            public  EnergyReadoutModel DecodeData(string data)
+            readout.MeterId = Encoding.UTF8.GetString(data, 5, lineBreakIndex - 5);
+            int startIndex = lineBreakIndex + 2;
+            while (lineBreakIndex != -1)
             {
-                
-                var lines = data.Split(new char[] { '\r', '\n' });
 
-                EnergyReadoutModel readout = new EnergyReadoutModel();
-                readout.MeterId = lines[0].Substring(5, lines[0].Length - 5);
-
-                for (int i = 1; i < lines.Length; i++)
+                lineBreakIndex = GetNextLineBreak(startIndex, data);
+                if (lineBreakIndex - startIndex > 10)
                 {
-                    COSEMObjectModel cosem = GetCosemObjectFromLine(lines[i]);
+                    COSEMObjectModel cosem = GetCosemObjectFromLine(data, startIndex, (lineBreakIndex == -1 ? data.Length - startIndex : lineBreakIndex - startIndex));
+
                     if (cosem.IsValidObject)
                     {
                         switch (cosem.ObisId)
@@ -125,7 +128,7 @@ namespace NFSmartMeter
                             case "24.1.0":
                             case "96.1.0":
                             case "24.2.1":
-                                string key = cosem.ObisIdTrail.Split('-')[1];
+                                string key = cosem.DeviceKey;
                                 ConnectedMeterModel device;
                                 if (readout.Devices.Contains(key))
                                 {
@@ -135,7 +138,7 @@ namespace NFSmartMeter
                                 {
                                     device = new ConnectedMeterModel() { Channel = uint.Parse(key) };
                                 }
-                                
+
                                 if (cosem.ObisId == "24.1.0")
                                 {
                                     device.DeviceType = uint.Parse(cosem.Value);
@@ -154,111 +157,150 @@ namespace NFSmartMeter
                                 break;
 
                             default:
-                                Debug.WriteLine($"unsupported Command: {cosem.ObisId}");
+                                Console.WriteLine($"unsupported Command: {cosem.ObisId}");
                                 break;
                         }
                     }
-
                 }
-
-                
+                startIndex = lineBreakIndex + 2;
+            }
             return readout;
+        }
+
+        static PowerOutageModel[] ParsePowerOutages(string[] powerOutageValues)
+        {
+            int numPowerOutages = powerOutageValues.Length / 2;
+            PowerOutageModel[] outages = new PowerOutageModel[numPowerOutages];
+            for (int i = 0; i < numPowerOutages; i++)
+            {
+                outages[i] = new PowerOutageModel { Timestamp = ParseTime(powerOutageValues[i * 2]), Duration = new TimeSpan(0, 0, int.Parse(powerOutageValues[i * 2 + 1])) };
             }
 
-            private PowerOutageModel[] ParsePowerOutages(string[] powerOutageValues)
+            return outages;
+        }
+
+        static private DateTime ParseTime(string timeString)
+        {
+            bool isWintertime = (timeString[12].Equals('W'));
+            int[] timeNum = new int[6];
+            for (int i = 0; i < 6; i++)
             {
-                int numPowerOutages = int.Parse(powerOutageValues[0] ?? "0");
-                PowerOutageModel[] outages = new PowerOutageModel[numPowerOutages];
-                for (int i = 0; i < numPowerOutages; i++)
+                timeNum[i] = int.Parse(timeString.Substring(i * 2, 2));
+            }
+            var time = new DateTime(2000 + timeNum[0], timeNum[1], timeNum[2], timeNum[3], timeNum[4], timeNum[5]).AddHours(-(isWintertime ? 1 : 2));
+            return time;
+        }
+
+        static string OctStringToHexString(string octString)
+        {
+            string hexString = string.Empty;
+            for (int i = 0; i < octString.Length; i += 2)
+            {
+                string hs = octString.Substring(i, 2);
+                hexString += (((char)Convert.ToUInt32(hs, 16)).ToString());
+
+            }
+            return hexString;
+        }
+
+        static double ParseKWH(string kwhString)
+        {
+            return double.Parse(kwhString);
+        }
+
+        static COSEMObjectModel GetCosemObjectFromLine(byte[] data, int startIndex, int length)
+        {
+            COSEMObjectModel cosem = new COSEMObjectModel();
+            cosem.IsValidObject = true;
+            cosem.DeviceKey = ((char)data[2 + startIndex]).ToString();
+
+            int indexFirstValue = 0;
+            for (int i = startIndex + 9; i < startIndex + 12; i++)
+            {
+                if (data[i] == '(')
                 {
-                    outages[i] = new PowerOutageModel { Timestamp = ParseTime(powerOutageValues[i * 2 + 2]), Duration = new TimeSpan(0, 0, int.Parse(powerOutageValues[i * 2 + 3])) };
+                    indexFirstValue = i;
+                    break;
                 }
-
-                return outages;
             }
-
-            private DateTime ParseTime(string timeString)
+            if (indexFirstValue == 0)
             {
-                bool isWintertime = (timeString[12].Equals('W'));
-                int[] timeNum = new int[6];
-                for(int i = 0; i < 6; i++)
+                cosem.IsValidObject = false;
+            }
+            else
+            {
+                cosem.ObisId = Encoding.UTF8.GetString(data, startIndex + 4, indexFirstValue - (startIndex + 4));
+                //multipull values
+                if (cosem.ObisId == "24.2.1")
                 {
-                    timeNum[i] = int.Parse(timeString.Substring(i * 2, 2));
+                    var values = Encoding.UTF8.GetString(data, startIndex + 26, length - 27).Split('*');
+                    cosem.Values = new string[]
+                    {
+                        Encoding.UTF8.GetString(data, startIndex + 11, 13),
+                        values[0]
+                    };
+                    cosem.Unit = values[1];
                 }
-                var time = new DateTime(2000 + timeNum[0], timeNum[1], timeNum[2], timeNum[3] , timeNum[4], timeNum[5]).AddHours( -(isWintertime ? 1 : 2));
-                return time;
-            }
-
-            private string OctStringToHexString(string octString)
-            {
-                string hexString = string.Empty;
-                for (int i = 0; i < octString.Length; i += 2)
+                else if (cosem.ObisId == "99.97.0") //power outages
                 {
-                    string hs = octString.Substring(i, 2);
-                    hexString += (((char)Convert.ToUInt32(hs, 16)).ToString());
+                    int lengthOfPowerOutagesField = 1;
+                    //get number of power outages;
+                    for (int i = startIndex + 13; data[i] != ')'; i++)
+                    {
+                        lengthOfPowerOutagesField++;
+                    }
+                    string numOutagesField = Encoding.UTF8.GetString(data, startIndex + 12, lengthOfPowerOutagesField);
+                    int numOutages = int.Parse(numOutagesField);
+                    cosem.Values = new string[numOutages * 2];
+                    int firstPowerOutageIndex = startIndex + 26 + lengthOfPowerOutagesField;
+                    for (int i = 0; i < numOutages; i++)
+                    {
+                        cosem.Values[i * 2] = Encoding.UTF8.GetString(data, i * 29 + 1 + firstPowerOutageIndex, 13);
+                        cosem.Values[i * 2 + 1] = Encoding.UTF8.GetString(data, i * 29 + 16 + firstPowerOutageIndex, 10);
+                    }
 
                 }
-                return hexString;
-            }
-
-            private double ParseKWH(string kwhString)
-            {
-                return double.Parse(kwhString);
-            }
-            private COSEMObjectModel GetCosemObjectFromLine(string line)
-            {
-                COSEMObjectModel cosem = new COSEMObjectModel();
-                var splits = line.Split('(');
-                if (splits.Length == 1)
-                {
-                    cosem.IsValidObject = false;
-                }
+                //single value
                 else
                 {
-                    string[] cosemIds = splits[0].Split(':');
-                    if (cosemIds.Length == 2)
+                    int endIndex = startIndex + length - 2;
+                    if (data[endIndex] > 0x2f) //letters are used
                     {
-                        cosem.IsValidObject = true;
-                        cosem.ObisIdTrail = cosemIds[0];
-                        cosem.ObisId = cosemIds[1];
-                        if (splits.Length == 2)
+                        //find end index special if *kwh
+                        for (int i = endIndex; i > endIndex - 4; i--)
                         {
-                            string[] values = removeTrailing(splits[1]);
-                            cosem.Value = values[0];
-                            if (values.Length == 2)
+                            if (data[i] == '*')
                             {
-                                cosem.Unit = values[1];
+                                endIndex = i - 1;
                             }
-                        }
-                        else
-                        {
-                            cosem.Values = new string[splits.Length - 1];
-                            for (int i = 1; i < splits.Length; i++)
-                            {
-                                string[] values = removeTrailing(splits[i]);
-                                cosem.Values[i - 1] = values[0];
-                                if (values.Length == 2)
-                                {
-                                    cosem.Unit = values[1];
-                                }
-                            }
-
                         }
                     }
-                    else
+                    cosem.Value = Encoding.UTF8.GetString(data, indexFirstValue + 1, endIndex - indexFirstValue);
+                }
+            }
+            return cosem;
+        }
+
+        private static int GetNextLineBreak(int startindex, byte[] buffer)
+        {
+            int len = buffer.Length;
+            for (int pos = startindex + 1; pos < len - 1; pos += 2)
+            {
+                if (buffer[pos] < 14)
+                {
+                    if (buffer[pos] == 13 && buffer[pos + 1] == 10)
                     {
-                        cosem.IsValidObject = false;
+                        return pos;
+                    }
+                    else if (buffer[pos] == 10 && buffer[pos - 1] == 13)
+                    {
+                        return pos - 1;
                     }
                 }
-
-                return cosem;
             }
-
-            private string[] removeTrailing(string part)
-            {
-                return part.Trim().TrimEnd(')').Split('*');
-
-            }
-           
+            return -1;
         }
+
+    }
 }
+
