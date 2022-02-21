@@ -9,13 +9,13 @@ using Windows.Storage.Streams;
 
 namespace NFSmartMeter
 {
-    public class SerialSmartMeterListner
+    public  class SerialSmartMeterListner
     {
         private object _lock = new object();
         private Queue Messages = new Queue();
         private SerialPort _serialDevice;
         public event P1MessageEventHandler P1MessageReceived;
-        public delegate void P1MessageEventHandler(object sender, P1MessageEventArgs e);
+        public delegate void P1MessageEventHandler (object sender, P1MessageEventArgs e);
 
         public SerialSmartMeterListner(int rxPin, int txPin)
         {
@@ -28,9 +28,12 @@ namespace NFSmartMeter
 
             Thread listenTread = new Thread(ReadSerialPort);
             listenTread.Start();
+
+            Thread DecodePayloadThread = new Thread(SerialHandler);
+            DecodePayloadThread.Start();
         }
 
-        private void ReadSerialPort()
+        private  void ReadSerialPort()
         {
             //var message = _decoder.DecodeData(TestDataRaw);
 
@@ -75,12 +78,15 @@ namespace NFSmartMeter
                 {
                     byte[] messageBuffer = new byte[index];
                     Array.Copy(buffer, messageBuffer, index);
-
-                    EnergyReadoutModel readOut = SerialHandler(messageBuffer);
-                    if (readOut != null)
+                    lock (_lock)
                     {
-                        P1MessageReceived?.Invoke(this, new P1MessageEventArgs() { EnergyReadout = readOut });
+                        Messages.Enqueue(messageBuffer);
                     }
+                    /*EnergyReadoutModel readOut = */ //SerialHandler(messageBuffer);
+                    //if (readOut != null)
+                    //{
+                    //    P1MessageReceived?.Invoke(this, new P1MessageEventArgs() { EnergyReadout = readOut });
+                    //}
 
                 }
 
@@ -91,20 +97,34 @@ namespace NFSmartMeter
             _serialDevice.Close();
         }
 
-        public EnergyReadoutModel SerialHandler(byte[] serialdata)
+        public void /*EnergyReadoutModel*/ SerialHandler(/*byte[] serialdata*/)
         {
-
-            string crcString = Encoding.UTF8.GetString(serialdata, serialdata.Length - 6, 4);
-            uint crc = hexString2uint(crcString);
-            if (CheckCrc(serialdata, crc))
+            while (true)
             {
-                return P1MessageDecoder.DecodeData(serialdata);
-            }
-            else
-            {
-                return null;
-            }
+                while (Messages.Count == 0)
+                {
+                    Thread.Sleep(150);
+                }
 
+                byte[] serialdata;
+                lock (_lock)
+                {
+                    serialdata = (byte[])Messages.Dequeue();
+                }
+                string crcString = Encoding.UTF8.GetString(serialdata, serialdata.Length - 6, 4);
+                uint crc = hexString2uint(crcString);
+                if (CheckCrc(serialdata, crc))
+                {
+                    var readOut = P1MessageDecoder.DecodeData(serialdata);
+                    P1MessageReceived?.Invoke(this, new P1MessageEventArgs() { EnergyReadout = readOut });
+
+                }
+                
+            }
+            //else
+            //{
+            //    return null;
+            //}
         }
 
         private static uint hexString2uint(string crcString)
@@ -199,6 +219,7 @@ namespace NFSmartMeter
 
             return crc == givenCrc;
         }
+
     }
 
     public class P1MessageEventArgs : EventArgs
