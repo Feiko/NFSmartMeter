@@ -21,11 +21,14 @@ namespace NFSmartMeter
         static int freeMemory = 0;
         private static SerialPort _serialDevice;
         private static HubConnection s_hubConnection;
+
+        private static byte[] _workBuffer = new byte[4000];
+        private static AutoResetEvent _dataAvailable = new AutoResetEvent(false);
+
         public static void Main()
         {
             const string Ssid = "testnetwork";
             const string Password = "securepassword1!";
-
 
 
             // Give 60 seconds to the wifi join to happen
@@ -68,51 +71,63 @@ namespace NFSmartMeter
             _serialDevice.ReadTimeout = 2000;
             _serialDevice.ReadBufferSize = 3072;
             _serialDevice.InvertSignalLevels = true;
-            //_serialDevice.DataReceived += _serialDevice_DataReceived;
-            freeMemory = (int)nanoFramework.Runtime.Native.GC.Run(true);
+            _serialDevice.WatchChar = '!';
+            _serialDevice.DataReceived += _serialDevice_DataReceived;
+            //freeMemory = (int)nanoFramework.Runtime.Native.GC.Run(true);
             _serialDevice.Open();
 
-            while (true)
-            {
-                int bytestoRead = _serialDevice.BytesToRead;
-                if (bytestoRead != 0)
-                {
-                    //get all bytes
-                    for (; ; )
-                    {
-                        Thread.Sleep(80);
-                        if (bytestoRead < _serialDevice.BytesToRead)
-                        {
-                            bytestoRead = _serialDevice.BytesToRead;
-                        }
-                        else
-                        {
-                            break;
-                        }
+            new Thread(ProcessIncommingBuffer).Start();
 
-                    }
-                    byte[] buffer = new byte[bytestoRead];
-                    _serialDevice.Read(buffer, 0, buffer.Length);
-                    if (buffer[buffer.Length - 7] == '!')
-                    {
-                        var message = SerialHandler(buffer);
-                        if (message != null)
-                        {
-                            message.PowerConsuming = freeMemory;
-                            P1Listener_P1MessageReceived(null, new P1MessageEventArgs() { EnergyReadout = message });
-                        }
-                        else
-                        {
-                            Debug.WriteLine(Encoding.UTF8.GetString(buffer, 0, buffer.Length));
-                        }
-                        freeMemory = (int)nanoFramework.Runtime.Native.GC.Run(true);
-                    }
-                }
-                else
-                {
-                    Thread.Sleep(100);
-                }
-            }
+
+            // TODO
+            // this will go away, possibly reuse some code in the ProcessIncommingBuffer
+
+            //while (true)
+            //{
+            //    int bytestoRead = _serialDevice.BytesToRead;
+            //    if (bytestoRead != 0)
+            //    {
+            //        //get all bytes
+            //        for (; ; )
+            //        {
+            //            Thread.Sleep(80);
+            //            if (bytestoRead < _serialDevice.BytesToRead)
+            //            {
+            //                bytestoRead = _serialDevice.BytesToRead;
+            //            }
+            //            else
+            //            {
+            //                break;
+            //            }
+
+            //        }
+
+            //        byte[] buffer = new byte[bytestoRead];
+
+            //        _serialDevice.Read(buffer, 0, buffer.Length);
+
+            //        if (buffer[buffer.Length - 7] == '!')
+            //        {
+            //            var message = SerialHandler(buffer);
+
+            //            if (message != null)
+            //            {
+            //                message.PowerConsuming = freeMemory;
+            //                P1Listener_P1MessageReceived(null, new P1MessageEventArgs() { EnergyReadout = message });
+            //            }
+            //            else
+            //            {
+            //                Debug.WriteLine(Encoding.UTF8.GetString(buffer, 0, buffer.Length));
+            //            }
+
+            //            freeMemory = (int)nanoFramework.Runtime.Native.GC.Run(true);
+            //        }
+            //    }
+            //    else
+            //    {
+            //        Thread.Sleep(100);
+            //    }
+            //}
 
 
             ///// this test runs without loosing memory! So Singalr Client and weboscket library do not seem to be the problem 
@@ -136,8 +151,34 @@ namespace NFSmartMeter
 
 
         static bool t_isReceiving = false;
-        //private static void _serialDevice_DataReceived(object sender, SerialDataReceivedEventArgs e)
-        //{
+        private static void _serialDevice_DataReceived(object sender, SerialDataReceivedEventArgs e)
+        {
+            if (e.EventType != SerialData.WatchChar)
+            {
+                // nothing to do here, need to wait for the !
+                return;
+            }
+
+            // now we have something to work on
+            _serialDevice.Read(_workBuffer, 0, _serialDevice.BytesToRead);
+
+            // signal the processing thread
+            _dataAvailable.Set();
+        }
+
+        private static void ProcessIncommingBuffer()
+        {
+            while(true)
+            {
+                // wait until there is something to do
+                _dataAvailable.WaitOne();
+
+                // read from the work buffer
+                // ....
+
+            }
+        }
+
         //    if (t_isReceiving) return;
         //    t_isReceiving = true;
         //    var port = (SerialPort)sender;
