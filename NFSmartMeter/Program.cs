@@ -16,8 +16,39 @@ using nanoFramework.Runtime.Native;
 
 namespace NFSmartMeter
 {
+    
+
+
     public class Program
     {
+        
+        const string TestDataRaw = @"/XMX5LGF0000453094270
+
+1-3:0.2.8(50)
+0-0:1.0.0(210304120347W)
+0-0:96.1.1(4530303531303035333039343237303139)
+1-0:1.8.1(001819.387*kWh)
+1-0:1.8.2(002093.302*kWh)
+1-0:2.8.1(000088.650*kWh)
+1-0:2.8.2(000157.206*kWh)
+0-0:96.14.0(0002)
+1-0:1.7.0(00.288*kW)
+1-0:2.7.0(00.000*kW)
+0-0:96.7.21(00015)
+0-0:96.7.9(00002)
+1-0:99.97.0(1)(0-0:96.7.19)(190226161118W)(0000000541*s)
+1-0:32.32.0(00019)
+1-0:32.36.0(00002)
+0-0:96.13.0()
+1-0:32.7.0(231.0*V)
+1-0:31.7.0(001*A)
+1-0:21.7.0(00.288*kW)
+1-0:22.7.0(00.000*kW)
+0-1:24.1.0(003)
+0-1:96.1.0(4730303339303031393231393034393139)
+0-1:24.2.1(210304120005W)(01980.598*m3)
+!894F  ";
+
         static int freeMemory = 0;
         private static SerialPort _serialDevice;
         private static HubConnection s_hubConnection;
@@ -72,60 +103,67 @@ namespace NFSmartMeter
             freeMemory = (int)nanoFramework.Runtime.Native.GC.Run(true);
             _serialDevice.Open();
 
-            while (true)
-            {
-                int bytestoRead = _serialDevice.BytesToRead;
-                if (bytestoRead != 0)
-                {
-                    //get all bytes
-                    for (; ; )
-                    {
-                        Thread.Sleep(80);
-                        if (bytestoRead < _serialDevice.BytesToRead)
-                        {
-                            bytestoRead = _serialDevice.BytesToRead;
-                        }
-                        else
-                        {
-                            break;
-                        }
+            //while (true)
+            //{
+            //    int bytestoRead = _serialDevice.BytesToRead;
+            //    if (bytestoRead != 0)
+            //    {
+            //        //get all bytes
+            //        for (; ; )
+            //        {
+            //            Thread.Sleep(80);
+            //            if (bytestoRead < _serialDevice.BytesToRead)
+            //            {
+            //                bytestoRead = _serialDevice.BytesToRead;
+            //            }
+            //            else
+            //            {
+            //                break;
+            //            }
 
-                    }
-                    byte[] buffer = new byte[bytestoRead];
-                    _serialDevice.Read(buffer, 0, buffer.Length);
-                    if (buffer[buffer.Length - 7] == '!')
-                    {
-                        var message = SerialHandler(buffer);
-                        if (message != null)
-                        {
-                            message.PowerConsuming = freeMemory;
-                            P1Listener_P1MessageReceived(null, new P1MessageEventArgs() { EnergyReadout = message });
-                        }
-                        else
-                        {
-                            Debug.WriteLine(Encoding.UTF8.GetString(buffer, 0, buffer.Length));
-                        }
-                        freeMemory = (int)nanoFramework.Runtime.Native.GC.Run(true);
-                    }
-                }
-                else
-                {
-                    Thread.Sleep(100);
-                }
-            }
+            //        }
+            //        byte[] buffer = new byte[bytestoRead];
+            //        _serialDevice.Read(buffer, 0, buffer.Length);
+            //        if (buffer[buffer.Length - 7] == '!')
+            //        {
+            //            var message = SerialHandler(buffer);
+            //            if (message != null)
+            //            {
+            //                message.PowerConsuming = freeMemory;
+            //                P1Listener_P1MessageReceived(null, new P1MessageEventArgs() { EnergyReadout = message });
+            //            }
+            //            else
+            //            {
+            //                Debug.WriteLine(Encoding.UTF8.GetString(buffer, 0, buffer.Length));
+            //            }
+            //            freeMemory = (int)nanoFramework.Runtime.Native.GC.Run(true);
+            //        }
+            //    }
+            //    else
+            //    {
+            //        Thread.Sleep(100);
+            //    }
+            //}
 
 
             ///// this test runs without loosing memory! So Singalr Client and weboscket library do not seem to be the problem 
 
-            //while (true)
-            //{
-            //    Debug.WriteLine(System.Environment.TickCount64.ToString());
-            //    P1Listener_P1MessageReceived(null, new P1MessageEventArgs() { EnergyReadout = new EnergyReadoutModel() {PowerConsuming = freeMemory, P1TimeStamp = DateTime.UtcNow } });
-            //    Debug.WriteLine(System.Environment.TickCount64.ToString());
-            //    Debug.WriteLine(nanoFramework.Runtime.Native.GC.Run(true).ToString());
-            //    Debug.WriteLine(System.Environment.TickCount64.ToString());
-            //    Thread.Sleep(50);
-            //}
+            while (true)
+            {
+                byte[] serialdata = Encoding.UTF8.GetBytes(TestDataRaw);
+                string crcString = Encoding.UTF8.GetString(serialdata, serialdata.Length - 6, 4);
+                uint crc = hexString2uint(crcString);
+                CheckCrc(serialdata, crc);
+                var message = P1MessageDecoder.DecodeData(serialdata);
+                message.PowerConsuming = freeMemory + 0.1;
+                message.P1TimeStamp = DateTime.UtcNow;
+                Debug.WriteLine(System.Environment.TickCount64.ToString());
+                P1Listener_P1MessageReceived(null, new P1MessageEventArgs() { EnergyReadout = message});
+                Debug.WriteLine(System.Environment.TickCount64.ToString());
+                Debug.WriteLine(nanoFramework.Runtime.Native.GC.Run(true).ToString());
+                Debug.WriteLine(System.Environment.TickCount64.ToString());
+                Thread.Sleep(50);
+            }
 
             Thread.Sleep(Timeout.Infinite);
 
