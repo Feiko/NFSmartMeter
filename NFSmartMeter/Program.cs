@@ -18,10 +18,11 @@ namespace NFSmartMeter
 {
     public class Program
     {
-        static int freeMemory = 0;
+
         private static SerialPort _serialDevice;
         private static HubConnection s_hubConnection;
 
+        private static int _bytesRead;
         private static byte[] _workBuffer = new byte[4000];
         private static AutoResetEvent _dataAvailable = new AutoResetEvent(false);
 
@@ -73,7 +74,7 @@ namespace NFSmartMeter
             _serialDevice.InvertSignalLevels = true;
             _serialDevice.WatchChar = '!';
             _serialDevice.DataReceived += _serialDevice_DataReceived;
-            //freeMemory = (int)nanoFramework.Runtime.Native.GC.Run(true);
+            int freeMemory = (int)nanoFramework.Runtime.Native.GC.Run(true);
             _serialDevice.Open();
 
             new Thread(ProcessIncommingBuffer).Start();
@@ -90,7 +91,7 @@ namespace NFSmartMeter
             //        //get all bytes
             //        for (; ; )
             //        {
-            //            Thread.Sleep(80);
+            //            Thread.Sleep(120);
             //            if (bytestoRead < _serialDevice.BytesToRead)
             //            {
             //                bytestoRead = _serialDevice.BytesToRead;
@@ -106,7 +107,7 @@ namespace NFSmartMeter
 
             //        _serialDevice.Read(buffer, 0, buffer.Length);
 
-            //        if (buffer[buffer.Length - 7] == '!')
+            //        if (buffer[buffer.Length - 7] == '!' && buffer.Length > 8)
             //        {
             //            var message = SerialHandler(buffer);
 
@@ -155,26 +156,44 @@ namespace NFSmartMeter
         {
             if (e.EventType != SerialData.WatchChar)
             {
+                Debug.WriteLine(e.EventType.ToString());
                 // nothing to do here, need to wait for the !
                 return;
             }
 
             // now we have something to work on
-            _serialDevice.Read(_workBuffer, 0, _serialDevice.BytesToRead);
+            Debug.WriteLine("new data");
+            _bytesRead = _serialDevice.Read(_workBuffer, 0, _serialDevice.BytesToRead);
 
             // signal the processing thread
+            
             _dataAvailable.Set();
         }
 
         private static void ProcessIncommingBuffer()
         {
-            while(true)
+            while (true)
             {
                 // wait until there is something to do
                 _dataAvailable.WaitOne();
 
                 // read from the work buffer
                 // ....
+
+                if (_bytesRead > 10 && _workBuffer[_bytesRead - 7] == '!')
+                {
+                    var message = SerialHandler(_workBuffer, _bytesRead);
+
+                    if (message != null)
+                    {
+                        P1Listener_P1MessageReceived(null, new P1MessageEventArgs() { EnergyReadout = message });
+                    }
+                    else
+                    {
+                        Debug.WriteLine(Encoding.UTF8.GetString(_workBuffer, 0, _bytesRead));
+                    }
+
+                }
 
             }
         }
@@ -278,13 +297,17 @@ namespace NFSmartMeter
         //    _serialDevice.Close();
         //}
 
-        public static EnergyReadoutModel SerialHandler(byte[] serialdata)
+        public static EnergyReadoutModel SerialHandler(byte[] serialdata, int length = -1)
         {
-            string crcString = Encoding.UTF8.GetString(serialdata, serialdata.Length - 6, 4);
-            uint crc = hexString2uint(crcString);
-            if (CheckCrc(serialdata, crc))
+            if(length == -1)
             {
-                return P1MessageDecoder.DecodeData(serialdata);
+                length = serialdata.Length;
+            }
+            string crcString = Encoding.UTF8.GetString(serialdata, length - 6, 4);
+            uint crc = hexString2uint(crcString);
+            if (CheckCrc(serialdata, crc, length))
+            {
+                return P1MessageDecoder.DecodeData(serialdata, length);
             }
             else
             {
@@ -358,15 +381,18 @@ namespace NFSmartMeter
             }
 
             return BitConverter.ToUInt16(new byte[] { (byte)(partNums[2] * 16 + partNums[3]), (byte)(partNums[0] * 16 + partNums[1]) }, 0);
-
+            
         }
 
-        private static bool CheckCrc(byte[] buf, uint givenCrc)
+        private static bool CheckCrc(byte[] buf, uint givenCrc, int length = -1)
         {
-
+            if(length == -1)
+            {
+                length = buf.Length;
+            }
             uint crc = 0;
             // -6 because we are reusing the original byte[] because of memory conservation
-            for (int pos = 0; pos < buf.Length - 6; pos++)
+            for (int pos = 0; pos < length - 6; pos++)
             {
                 crc ^= buf[pos];    // XOR byte into least sig. byte of crc
 

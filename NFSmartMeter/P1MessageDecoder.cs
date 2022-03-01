@@ -8,20 +8,22 @@ namespace NFSmartMeter
     public static class P1MessageDecoder
     {
 
-        public static EnergyReadoutModel DecodeData(byte[] data)
+        public static EnergyReadoutModel DecodeData(byte[] data, int length = -1)
         {
+            if (length == -1) length = data.Length;
+
             EnergyReadoutModel readout = new EnergyReadoutModel();
-            int lineBreakIndex = GetNextLineBreak(0, data);
+            int lineBreakIndex = GetNextLineBreak(0, data, length);
 
             readout.MeterId = Encoding.UTF8.GetString(data, 5, lineBreakIndex - 5);
             int startIndex = lineBreakIndex + 2;
             while (lineBreakIndex != -1)
             {
 
-                lineBreakIndex = GetNextLineBreak(startIndex, data);
+                lineBreakIndex = GetNextLineBreak(startIndex, data, length);
                 if (lineBreakIndex - startIndex > 10)
                 {
-                    COSEMObjectModel cosem = GetCosemObjectFromLine(data, startIndex, (lineBreakIndex == -1 ? data.Length - startIndex : lineBreakIndex - startIndex));
+                    COSEMObjectModel cosem = GetCosemObjectFromLine(data, startIndex, (lineBreakIndex == -1 ? length - startIndex : lineBreakIndex - startIndex));
 
                     if (cosem.IsValidObject)
                     {
@@ -279,9 +281,9 @@ namespace NFSmartMeter
             return cosem;
         }
 
-        private static int GetNextLineBreak(int startindex, byte[] buffer)
+        private static int GetNextLineBreak(int startindex, byte[] buffer, int len)
         {
-            int len = buffer.Length;
+
             for (int pos = startindex + 1; pos < len - 1; pos += 2)
             {
                 if (buffer[pos] < 14)

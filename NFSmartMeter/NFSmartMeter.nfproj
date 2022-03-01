@@ -47,9 +47,6 @@
     <Reference Include="nanoFramework.Runtime.Native">
       <HintPath>..\packages\nanoFramework.Runtime.Native.1.5.4-preview.5\lib\nanoFramework.Runtime.Native.dll</HintPath>
     </Reference>
-    <Reference Include="nanoFramework.SignalR.Client">
-      <HintPath>..\packages\nanoFramework.SignalR.Client.1.0.0-preview.57\lib\nanoFramework.SignalR.Client.dll</HintPath>
-    </Reference>
     <Reference Include="nanoFramework.System.Collections">
       <HintPath>..\packages\nanoFramework.System.Collections.1.4.0-preview.16\lib\nanoFramework.System.Collections.dll</HintPath>
     </Reference>
@@ -80,6 +77,9 @@
     <Reference Include="System.Threading">
       <HintPath>..\packages\nanoFramework.System.Threading.1.0.4-preview.16\lib\System.Threading.dll</HintPath>
     </Reference>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\nanoFramework.SignalR.Client\nanoFramework.SignalR.Client\nanoFramework.SignalR.Client.nfproj" />
   </ItemGroup>
   <Import Project="$(NanoFrameworkProjectSystemPath)NFProjectSystem.CSharp.targets" Condition="Exists('$(NanoFrameworkProjectSystemPath)NFProjectSystem.CSharp.targets')" />
   <ProjectExtensions>
