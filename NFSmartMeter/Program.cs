@@ -18,7 +18,7 @@ namespace NFSmartMeter
 {
     public class Program
     {
-
+        private static Timer _readTimer;
         private static SerialPort _serialDevice;
         private static HubConnection s_hubConnection;
 
@@ -72,16 +72,44 @@ namespace NFSmartMeter
             _serialDevice.ReadTimeout = 2000;
             _serialDevice.ReadBufferSize = 3072;
             _serialDevice.InvertSignalLevels = true;
-            _serialDevice.WatchChar = '!';
-            _serialDevice.DataReceived += _serialDevice_DataReceived;
+            //_serialDevice.WatchChar = '!';
+            //_serialDevice.DataReceived += _serialDevice_DataReceived;
             int freeMemory = (int)nanoFramework.Runtime.Native.GC.Run(true);
             _serialDevice.Open();
+            SetTimer();
 
-            new Thread(ProcessIncommingBuffer).Start();
+            //new Thread(ProcessIncommingBuffer).Start();
 
 
             // TODO
             // this will go away, possibly reuse some code in the ProcessIncommingBuffer
+
+            //byte[] tempBuffer = new byte[4096];
+            //int tempIndex = 0;
+            //bool tempSecondLoop = false;
+            //while (true)
+            //{
+            //    int tempBytesToRead = _serialDevice.BytesToRead;
+            //    if(tempBytesToRead > 0)
+            //    {
+            //        _serialDevice.Read(tempBuffer, tempIndex, tempBytesToRead);
+            //        tempIndex += tempBytesToRead;
+
+            //        if (tempIndex > 8 && tempBuffer[tempIndex - 7] == '!')
+            //        {
+            //            if (tempSecondLoop)
+            //            {
+            //                break;
+            //            }
+            //            else
+            //            {
+            //                tempSecondLoop = true;
+            //            }
+            //        }
+            //    }
+            //}
+            //Thread.Sleep(50);
+            //_readTimer = new Timer(ReadSerial, null, 1000, 1000);
 
             //while (true)
             //{
@@ -107,7 +135,7 @@ namespace NFSmartMeter
 
             //        _serialDevice.Read(buffer, 0, buffer.Length);
 
-            //        if (buffer[buffer.Length - 7] == '!' && buffer.Length > 8)
+            //        if (buffer.Length > 8 && buffer[buffer.Length - 7] == '!')
             //        {
             //            var message = SerialHandler(buffer);
 
@@ -150,53 +178,130 @@ namespace NFSmartMeter
             // Join our lively Discord community: https://discord.gg/gCyBu8T
         }
 
-
-        static bool t_isReceiving = false;
-        private static void _serialDevice_DataReceived(object sender, SerialDataReceivedEventArgs e)
+        private static void SetTimer()
         {
-            if (e.EventType != SerialData.WatchChar)
+            if(_readTimer != null)
             {
-                Debug.WriteLine(e.EventType.ToString());
-                // nothing to do here, need to wait for the !
-                return;
+                _readTimer.Dispose();
+                //make sure all reading threads have finished
+                Thread.Sleep(2000);
             }
 
-            // now we have something to work on
-            Debug.WriteLine("new data");
-            _bytesRead = _serialDevice.Read(_workBuffer, 0, _serialDevice.BytesToRead);
-
-            // signal the processing thread
-            
-            _dataAvailable.Set();
-        }
-
-        private static void ProcessIncommingBuffer()
-        {
+            byte[] tempBuffer = new byte[4096];
+            int tempIndex = 0;
+            bool tempSecondLoop = false;
             while (true)
             {
-                // wait until there is something to do
-                _dataAvailable.WaitOne();
-
-                // read from the work buffer
-                // ....
-
-                if (_bytesRead > 10 && _workBuffer[_bytesRead - 7] == '!')
+                int tempBytesToRead = _serialDevice.BytesToRead;
+                if (tempBytesToRead > 0)
                 {
-                    var message = SerialHandler(_workBuffer, _bytesRead);
-
-                    if (message != null)
+                    if(tempBytesToRead + tempIndex > tempBuffer.Length)
                     {
-                        P1Listener_P1MessageReceived(null, new P1MessageEventArgs() { EnergyReadout = message });
+                        tempIndex = 0;
                     }
-                    else
-                    {
-                        Debug.WriteLine(Encoding.UTF8.GetString(_workBuffer, 0, _bytesRead));
-                    }
+                    _serialDevice.Read(tempBuffer, tempIndex, tempBytesToRead);
+                    tempIndex += tempBytesToRead;
 
+                    if (tempIndex > 8 && tempBuffer[tempIndex - 7] == '!')
+                    {
+                        if (tempSecondLoop)
+                        {
+                            break;
+                        }
+                        else
+                        {
+                            tempSecondLoop = true;
+                            tempIndex = 0;
+
+                        }
+                    }
+                }
+            }
+            Thread.Sleep(50);
+            _readTimer = new Timer(ReadSerial, null, 1000, 1000);
+            Debug.WriteLine("timer set");
+        }
+
+        static int _freeMemory = 0;
+        private static void ReadSerial(object state)
+        {
+            
+            int bytestoRead = _serialDevice.BytesToRead;
+            byte[] buffer = new byte[bytestoRead];
+
+            _serialDevice.Read(buffer, 0, buffer.Length);
+
+            if (buffer.Length > 8 && buffer[buffer.Length - 7] == '!')
+            {
+                var message = SerialHandler(buffer);
+
+                if (message != null)
+                {
+                    message.PowerConsuming = _freeMemory;
+                    P1Listener_P1MessageReceived(null, new P1MessageEventArgs() { EnergyReadout = message });
+                }
+                else
+                {
+                    Debug.WriteLine("error");
                 }
 
+                _freeMemory = (int)nanoFramework.Runtime.Native.GC.Run(true);
+            }
+            else
+            {
+                Debug.WriteLine("setting timer");
+                SetTimer();
+                return;
             }
         }
+
+
+        //static bool t_isReceiving = false;
+        //private static void _serialDevice_DataReceived(object sender, SerialDataReceivedEventArgs e)
+        //{
+        //    if (e.EventType != SerialData.WatchChar)
+        //    {
+        //        Debug.WriteLine(e.EventType.ToString());
+        //        // nothing to do here, need to wait for the !
+        //        return;
+        //    }
+
+        //    // now we have something to work on
+        //    Debug.WriteLine("new data");
+        //    _bytesRead = _serialDevice.Read(_workBuffer, 0, _serialDevice.BytesToRead);
+
+        //    // signal the processing thread
+
+        //    _dataAvailable.Set();
+        //}
+
+        //private static void ProcessIncommingBuffer()
+        //{
+        //    while (true)
+        //    {
+        //        // wait until there is something to do
+        //        _dataAvailable.WaitOne();
+
+        //        // read from the work buffer
+        //        // ....
+
+        //        if (_bytesRead > 10 && _workBuffer[_bytesRead - 7] == '!')
+        //        {
+        //            var message = SerialHandler(_workBuffer, _bytesRead);
+
+        //            if (message != null)
+        //            {
+        //                P1Listener_P1MessageReceived(null, new P1MessageEventArgs() { EnergyReadout = message });
+        //            }
+        //            else
+        //            {
+        //                Debug.WriteLine(Encoding.UTF8.GetString(_workBuffer, 0, _bytesRead));
+        //            }
+
+        //        }
+
+        //    }
+        //}
 
         //    if (t_isReceiving) return;
         //    t_isReceiving = true;
