@@ -10,6 +10,7 @@ using System.Text;
 using NFSmartMeter.Models;
 using nanoFramework.M2Mqtt;
 using nanoFramework.M2Mqtt.Messages;
+using System.Device.Wifi;
 
 namespace NFSmartMeter
 {
@@ -26,20 +27,56 @@ namespace NFSmartMeter
 
 
             // Give 60 seconds to the wifi join to happen
-            while (true)
+            //while (true)
+            //{
+            //    CancellationTokenSource cs = new(60000);
+            //    var success = WifiNetworkHelper.ScanAndConnectDhcp(Ssid, Password, token: cs.Token);
+            //    if (!success)
+            //    {
+            //        Debug.WriteLine("retrying WiFi");
+            //        Thread.Sleep(50);
+            //    }
+            //    else
+            //    {
+            //        break;
+            //    }
+            //}
+
+            WifiAdapter sender = WifiAdapter.FindAllAdapters()[0];
+            sender.Disconnect();
+            sender.ScanAsync();
+            Thread.Sleep(10000);
+            WifiNetworkReport report = sender.NetworkReport;
+
+            // Enumerate though networks looking for our network
+            foreach (WifiAvailableNetwork net in report.AvailableNetworks)
             {
-                CancellationTokenSource cs = new(60000);
-                var success = WifiNetworkHelper.ScanAndConnectDhcp(Ssid, Password, token: cs.Token);
-                if (!success)
+                // Show all networks found
+                Debug.WriteLine($"Net SSID :{net.Ssid},  BSSID : {net.Bsid},  rssi : {net.NetworkRssiInDecibelMilliwatts.ToString()},  signal : {net.SignalBars.ToString()}");
+
+                // If its our Network then try to connect
+                if (net.Ssid == "testnetwork")
                 {
-                    Debug.WriteLine("retrying WiFi");
-                    Thread.Sleep(50);
-                }
-                else
-                {
-                    break;
+                    // Disconnect in case we are already connected
+                    sender.Disconnect();
+
+                    // Connect to network
+                    WifiConnectionResult result = sender.Connect(net, WifiReconnectionKind.Automatic, "securepassword1!");
+
+                    // Display status
+                    if (result.ConnectionStatus == WifiConnectionStatus.Success)
+                    {
+                        Debug.WriteLine("Connected to Wifi network");
+                    }
+                    else
+                    {
+                        Debug.WriteLine($"Error {result.ConnectionStatus.ToString()} connecting o Wifi network");
+                    }
                 }
             }
+
+            Thread.Sleep(2000);
+
 
             Debug.WriteLine(IPAddress.GetDefaultLocalAddress().ToString());
 
@@ -49,9 +86,14 @@ namespace NFSmartMeter
 
 
             //Reconnect is set to true
-            s_Mqtt = new MqttClient("20.56.99.54");
-            s_Mqtt.ConnectionClosed += S_Mqtt_ConnectionClosed;
-            ConnectMqtt();
+            //s_Mqtt = new MqttClient("20.56.99.54");
+            ThingsMqtt things = new ThingsMqtt();
+            //things.Connect("test.mosquitto.org", "");
+            things.Connect("20.56.99.54", "kDIAQqIEU4l1A1jpyUQN");
+            things.SendTelemetry("{\"key12\":\"value9\", \"key7\":\"value8\"}");
+            //s_Mqtt = new MqttClient("20.56.99.54", 1883, false, null, null, MqttSslProtocols.None);
+            //s_Mqtt.ConnectionClosed += S_Mqtt_ConnectionClosed;
+            //ConnectMqtt();
 
             //setup serial port
             Configuration.SetPinFunction(26, DeviceFunction.COM2_TX);
@@ -268,7 +310,7 @@ namespace NFSmartMeter
                 try
                 {
                     var readout = e.EnergyReadout;
-                    s_Mqtt.Publish("/v1/devices/me/telemetry", Encoding.UTF8.GetBytes("{\"temperature\": 20.3}"), MqttQoSLevel.ExactlyOnce, false);
+                    s_Mqtt.Publish("v1/devices/me/telemetry", Encoding.UTF8.GetBytes("{\"temperature\": 20.3}"), MqttQoSLevel.ExactlyOnce, false);
                     //AtomLite.NeoPixel.SetColor(Color.Green);
                 }
                 catch (Exception ex)
@@ -293,22 +335,41 @@ namespace NFSmartMeter
 
         private static void ConnectMqtt()
         {
+            string userName = "kDIAQqIEU4l1A1jpyUQN";
+            string guid = Guid.NewGuid().ToString().Substring(0,22);
             //AtomLite.NeoPixel.SetColor(Color.Yellow);
             while (!s_Mqtt.IsConnected)
             {
-                var ret = s_Mqtt.Connect("kDIAQqIEU4l1A1jpyUQN", true);
+                var ret = s_Mqtt.Connect(guid, userName, null);
                 if (ret != MqttReasonCode.Success)
                 {
                     Debug.WriteLine($"ERROR connecting: {ret}");
                     s_Mqtt.Disconnect();
                     Thread.Sleep(10000);
                 }
+                else
+                {
+                    Debug.WriteLine($"connected to mqtt with {guid}");
+                }
 
 
-                
+
             }
 
             Debug.WriteLine("reconnected");
+
+            Thread.Sleep(2000);
+            if (s_Mqtt.IsConnected)
+            {
+                s_Mqtt.Publish("v1/devices/me/telemetry", Encoding.UTF8.GetBytes("{\"key6\":\"value9\", \"key7\":\"value8\"}"), MqttQoSLevel.AtLeastOnce, false);
+                Debug.WriteLine("send");
+            }
+            else
+            {
+                Debug.WriteLine("not connected");
+            }
         }
+
+        
     }
 }
