@@ -2,17 +2,14 @@
 using nanoFramework.Hardware.Esp32;
 using System;
 using System.Diagnostics;
-using System.Drawing;
 using System.Threading;
-using nanoFramework.SignalR.Client;
 using nanoFramework.Networking;
 using System.Net;
 using System.IO.Ports;
 using System.Text;
 using NFSmartMeter.Models;
-using nanoFramework.Runtime.Native;
-
-
+using nanoFramework.M2Mqtt;
+using nanoFramework.M2Mqtt.Messages;
 
 namespace NFSmartMeter
 {
@@ -20,7 +17,7 @@ namespace NFSmartMeter
     {
         private static Timer _readTimer;
         private static SerialPort _serialDevice;
-        private static HubConnection s_hubConnection;
+        private static MqttClient s_Mqtt;
 
         public static void Main()
         {
@@ -32,7 +29,7 @@ namespace NFSmartMeter
             while (true)
             {
                 CancellationTokenSource cs = new(60000);
-                var success = WiFiNetworkHelper.ScanAndConnectDhcp(Ssid, Password, token: cs.Token);
+                var success = WifiNetworkHelper.ScanAndConnectDhcp(Ssid, Password, token: cs.Token);
                 if (!success)
                 {
                     Debug.WriteLine("retrying WiFi");
@@ -50,16 +47,11 @@ namespace NFSmartMeter
             //SerialSmartMeterListner p1Listener = new SerialSmartMeterListner(32, 26);
             //p1Listener.P1MessageReceived += P1Listener_P1MessageReceived;
 
-            //Create headers
-            var headers = new System.Net.WebSockets.ClientWebSocketHeaders();
-            headers["secret"] = "mySecretKey";
-            headers["smartMeterId"] = "Feiko.IO Smart Meter";
 
             //Reconnect is set to true
-            s_hubConnection = new HubConnection("http://192.168.179.2:5001/SmartMeterHub", headers);
-            s_hubConnection.Closed += SigClient_Closed;
-
-            ConnectHub();
+            s_Mqtt = new MqttClient("20.56.99.54");
+            s_Mqtt.ConnectionClosed += S_Mqtt_ConnectionClosed;
+            ConnectMqtt();
 
             //setup serial port
             Configuration.SetPinFunction(26, DeviceFunction.COM2_TX);
@@ -78,6 +70,8 @@ namespace NFSmartMeter
             // Check our documentation online: https://docs.nanoframework.net/
             // Join our lively Discord community: https://discord.gg/gCyBu8T
         }
+
+
 
         private static void SetTimer()
         {
@@ -269,11 +263,12 @@ namespace NFSmartMeter
 
         private static void P1Listener_P1MessageReceived(object sender, P1MessageEventArgs e)
         {
-            if (s_hubConnection.State == HubConnectionState.Connected)
+            if (s_Mqtt.IsConnected)
             {
                 try
                 {
-                    s_hubConnection.SendCore("SendData", new object[] { e.EnergyReadout });
+                    var readout = e.EnergyReadout;
+                    s_Mqtt.Publish("/v1/devices/me/telemetry", Encoding.UTF8.GetBytes("{\"temperature\": 20.3}"), MqttQoSLevel.ExactlyOnce, false);
                     //AtomLite.NeoPixel.SetColor(Color.Green);
                 }
                 catch (Exception ex)
@@ -289,29 +284,28 @@ namespace NFSmartMeter
             }
         }
 
-        private static void SigClient_Closed(object sender, SignalrEventMessageArgs message)
+        private static void S_Mqtt_ConnectionClosed(object sender, EventArgs e)
         {
-            Debug.WriteLine($"closed with message {message.Message} \r\n Reconnecting!");
-            ConnectHub();
+            Debug.WriteLine($"Connection closed \r\n Reconnecting!");
+            s_Mqtt.Disconnect();
+            ConnectMqtt();
         }
 
-        private static void ConnectHub()
+        private static void ConnectMqtt()
         {
             //AtomLite.NeoPixel.SetColor(Color.Yellow);
-            while (s_hubConnection.State != HubConnectionState.Connected)
+            while (!s_Mqtt.IsConnected)
             {
-                try
+                var ret = s_Mqtt.Connect("kDIAQqIEU4l1A1jpyUQN", true);
+                if (ret != MqttReasonCode.Success)
                 {
-                    s_hubConnection.Start();
-                    //AtomLite.NeoPixel.SetColor(Color.Blue);
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine("Failed to connect with message: " + ex.Message);
+                    Debug.WriteLine($"ERROR connecting: {ret}");
+                    s_Mqtt.Disconnect();
+                    Thread.Sleep(10000);
                 }
 
-                //sleep 1 minute
-                Thread.Sleep(10000);
+
+                
             }
 
             Debug.WriteLine("reconnected");
