@@ -8,9 +8,9 @@ using System.Net;
 using System.IO.Ports;
 using System.Text;
 using NFSmartMeter.Models;
-using nanoFramework.M2Mqtt;
-using nanoFramework.M2Mqtt.Messages;
+
 using System.Device.Wifi;
+using System.Net.Http;
 
 namespace NFSmartMeter
 {
@@ -18,29 +18,13 @@ namespace NFSmartMeter
     {
         private static Timer _readTimer;
         private static SerialPort _serialDevice;
-        private static MqttClient s_Mqtt;
+        static readonly HttpClient _httpClient = new HttpClient();
 
         public static void Main()
         {
             const string Ssid = "testnetwork";
             const string Password = "securepassword1!";
 
-
-            // Give 60 seconds to the wifi join to happen
-            //while (true)
-            //{
-            //    CancellationTokenSource cs = new(60000);
-            //    var success = WifiNetworkHelper.ScanAndConnectDhcp(Ssid, Password, token: cs.Token);
-            //    if (!success)
-            //    {
-            //        Debug.WriteLine("retrying WiFi");
-            //        Thread.Sleep(50);
-            //    }
-            //    else
-            //    {
-            //        break;
-            //    }
-            //}
 
             WifiAdapter sender = WifiAdapter.FindAllAdapters()[0];
             sender.Disconnect();
@@ -75,25 +59,22 @@ namespace NFSmartMeter
                 }
             }
 
-            Thread.Sleep(2000);
+            Thread.Sleep(5000);
 
 
             Debug.WriteLine(IPAddress.GetDefaultLocalAddress().ToString());
+            Thread.Sleep(5000);
+
+            var content = new StringContent("{\"temperature\": 20.3}");
+            HttpResponseMessage response = _httpClient.Post("http://20.56.99.54:8080/api/v1/kDIAQqIEU4l1A1jpyUQN/telemetry", content);
+            Debug.WriteLine(response.StatusCode.ToString());
 
             //Setup SmartMeter Connection
             //SerialSmartMeterListner p1Listener = new SerialSmartMeterListner(32, 26);
             //p1Listener.P1MessageReceived += P1Listener_P1MessageReceived;
 
 
-            //Reconnect is set to true
-            //s_Mqtt = new MqttClient("20.56.99.54");
-            ThingsMqtt things = new ThingsMqtt();
-            //things.Connect("test.mosquitto.org", "");
-            things.Connect("20.56.99.54", "kDIAQqIEU4l1A1jpyUQN");
-            things.SendTelemetry("{\"key12\":\"value9\", \"key7\":\"value8\"}");
-            //s_Mqtt = new MqttClient("20.56.99.54", 1883, false, null, null, MqttSslProtocols.None);
-            //s_Mqtt.ConnectionClosed += S_Mqtt_ConnectionClosed;
-            //ConnectMqtt();
+
 
             //setup serial port
             Configuration.SetPinFunction(26, DeviceFunction.COM2_TX);
@@ -305,70 +286,24 @@ namespace NFSmartMeter
 
         private static void P1Listener_P1MessageReceived(object sender, P1MessageEventArgs e)
         {
-            if (s_Mqtt.IsConnected)
-            {
-                try
-                {
-                    var readout = e.EnergyReadout;
-                    s_Mqtt.Publish("v1/devices/me/telemetry", Encoding.UTF8.GetBytes("{\"temperature\": 20.3}"), MqttQoSLevel.ExactlyOnce, false);
-                    //AtomLite.NeoPixel.SetColor(Color.Green);
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine(ex.Message);
-                    //AtomLite.NeoPixel.SetColor(Color.Red);
-                }
 
-            }
-            else
+            try
             {
-                //AtomLite.NeoPixel.SetColor(Color.Orange);
+                var readout = e.EnergyReadout;
+                var content = new StringContent("{\"temperature\": 20.3}");
+                HttpResponseMessage response = _httpClient.Post("http://20.56.99.54:8080/api/v1/kDIAQqIEU4l1A1jpyUQN/telemetry", content);
+
+                //s_Mqtt.Publish("v1/devices/me/telemetry", Encoding.UTF8.GetBytes("{\"temperature\": 20.3}"), MqttQoSLevel.ExactlyOnce, false);
+                //AtomLite.NeoPixel.SetColor(Color.Green);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(ex.Message);
+                //AtomLite.NeoPixel.SetColor(Color.Red);
             }
         }
 
-        private static void S_Mqtt_ConnectionClosed(object sender, EventArgs e)
-        {
-            Debug.WriteLine($"Connection closed \r\n Reconnecting!");
-            s_Mqtt.Disconnect();
-            ConnectMqtt();
-        }
-
-        private static void ConnectMqtt()
-        {
-            string userName = "kDIAQqIEU4l1A1jpyUQN";
-            string guid = Guid.NewGuid().ToString().Substring(0,22);
-            //AtomLite.NeoPixel.SetColor(Color.Yellow);
-            while (!s_Mqtt.IsConnected)
-            {
-                var ret = s_Mqtt.Connect(guid, userName, null);
-                if (ret != MqttReasonCode.Success)
-                {
-                    Debug.WriteLine($"ERROR connecting: {ret}");
-                    s_Mqtt.Disconnect();
-                    Thread.Sleep(10000);
-                }
-                else
-                {
-                    Debug.WriteLine($"connected to mqtt with {guid}");
-                }
-
-
-
-            }
-
-            Debug.WriteLine("reconnected");
-
-            Thread.Sleep(2000);
-            if (s_Mqtt.IsConnected)
-            {
-                s_Mqtt.Publish("v1/devices/me/telemetry", Encoding.UTF8.GetBytes("{\"key6\":\"value9\", \"key7\":\"value8\"}"), MqttQoSLevel.AtLeastOnce, false);
-                Debug.WriteLine("send");
-            }
-            else
-            {
-                Debug.WriteLine("not connected");
-            }
-        }
+ 
 
         
     }
